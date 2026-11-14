@@ -23,6 +23,15 @@ public struct LiveEstimate: Sendable {
     public let lastSample: Double?
     public let computedAt: Double
     public let message: String
+
+    /// Change of the estimate over the last `seconds` (°C), from the history; nil if
+    /// the history does not reach that far back.
+    public func trend(over seconds: Double = 3600) -> Double? {
+        guard let last = history.last, let first = history.first, last.t - first.t >= seconds * 0.9 else { return nil }
+        let target = last.t - seconds
+        guard let past = history.min(by: { abs($0.t - target) < abs($1.t - target) }) else { return nil }
+        return last.room - past.room
+    }
 }
 
 /// Runs the Phase 5 pipeline against the recorder's database for live display.
@@ -35,6 +44,9 @@ public actor LiveEstimator {
     public let dbPath: String
     /// Recorder considered stopped after this long without a sample.
     public var staleAfter: Double = 600
+    /// Filter tuning. The default is the accuracy-validated one; a larger `roomWalk`
+    /// reacts faster to room changes but passes more model error through.
+    public private(set) var tuning = RoomFilter.Tuning()
 
     private var cacheKey: String?
     private var model: TransferCalibration.Model?
@@ -46,6 +58,12 @@ public actor LiveEstimator {
 
     public init(dbPath: String = SampleStore.defaultPath) {
         self.dbPath = dbPath
+    }
+
+    /// Changes the filter tuning; the next `estimate` replays the log with it.
+    public func setTuning(_ t: RoomFilter.Tuning) {
+        tuning = t
+        cacheKey = nil
     }
 
     public func estimate(now: Double = Date().timeIntervalSince1970) throws -> LiveEstimate {
@@ -120,7 +138,7 @@ public actor LiveEstimator {
             model = TransferCalibration.calibrate(all.map(\.seg))
         }
 
-        var f = RoomFilter(room: first.room, roomSD: max(first.spread, 0.25))
+        var f = RoomFilter(room: first.room, roomSD: max(first.spread, 0.25), tuning: tuning)
         var t = first.end
         for (i, night) in nights.enumerated() {
             if i > 0 {

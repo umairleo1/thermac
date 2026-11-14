@@ -174,3 +174,22 @@ struct LiveEstimatorTests {
         #expect(at(9000 + 4000) == 1)
     }
 }
+
+@Suite("Live trend")
+struct LiveTrendTests {
+    func estimate(_ history: [(Double, Double)]) -> LiveEstimate {
+        LiveEstimate(room: history.last?.1, roomSD: 1, source: .filter, lastNight: nil, goodNights: 2,
+                     history: history.map { ($0.0, $0.1, 1) }, lastSample: history.last?.0,
+                     computedAt: history.last?.0 ?? 0, message: "")
+    }
+
+    @Test func trendOverLastHour() throws {
+        let h = stride(from: 0.0, through: 7200, by: 300).map { ($0, 18 - $0 / 7200) }   // −0.5 °C/h
+        let trend = try #require(estimate(h).trend())
+        #expect(abs(trend + 0.5) < 0.01)
+    }
+
+    @Test func noTrendWithoutEnoughHistory() {
+        #expect(estimate([(0, 18), (600, 18.2)]).trend() == nil)
+    }
+}

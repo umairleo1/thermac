@@ -32,6 +32,15 @@ public struct RoomFilter: Sendable {
         public var observationSD = 0.3
 
         public init() {}
+
+        /// Opt-in faster tracking: shows most of a room change within ~50 min instead of
+        /// ~3 h, at the cost of ~0.35 °C jitter and larger errors on real data (replay
+        /// 2026-11-14: worst next-night error 2.13 °C vs 1.46 °C).
+        public static var responsive: Tuning {
+            var t = Tuning()
+            t.roomWalk = 1.0
+            return t
+        }
     }
 
     /// State `[T, b_fast, b_slow]` and its covariance.
