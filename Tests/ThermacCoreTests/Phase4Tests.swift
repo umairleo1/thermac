@@ -193,3 +193,50 @@ struct LiveTrendTests {
         #expect(estimate([(0, 18), (600, 18.2)]).trend() == nil)
     }
 }
+
+@Suite("Change detection")
+struct ChangeDetectionTests {
+    /// Model observations follow what the Mac "feels" (45-min lag to a new environment)
+    /// plus the measured fast model error.
+    func run(to newRoom: Double, minutes: Double, tuning: RoomFilter.Tuning, seed: UInt64) -> RoomFilter {
+        var rng = SeededRandom(seed: seed)
+        var f = RoomFilter(room: 17, roomSD: 0.3, tuning: tuning)
+        var err = 0.0, felt = 17.0
+        let dt = 5.0, phi = exp(-dt / 1800), a = exp(-dt / 2700)
+        for _ in 0..<(2 * 720) {
+            err = phi * err + 1.7 * (1 - phi * phi).squareRoot() * rng.gaussian()
+            f.predict(dt: dt); f.observeModel(17 + err + 0.3 * rng.gaussian())
+        }
+        for _ in 0..<Int(minutes * 12) {
+            felt = a * felt + (1 - a) * newRoom
+            err = phi * err + 1.7 * (1 - phi * phi).squareRoot() * rng.gaussian()
+            f.predict(dt: dt); f.observeModel(felt + err + 0.3 * rng.gaussian())
+        }
+        return f
+    }
+
+    @Test func carriedOutsideIsFollowedWithinTwoHours() {
+        var on: [Double] = [], off: [Double] = []
+        var noDetect = RoomFilter.Tuning(); noDetect.changeThreshold = nil
+        for seed in 1...10 as ClosedRange<UInt64> {
+            on.append(run(to: 5, minutes: 120, tuning: RoomFilter.Tuning(), seed: seed).room)
+            off.append(run(to: 5, minutes: 120, tuning: noDetect, seed: seed).room)
+        }
+        let meanOn = on.reduce(0, +) / 10, meanOff = off.reduce(0, +) / 10
+        #expect(meanOn < 9, "with detection: \(meanOn)")
+        #expect(meanOff > 12, "without detection: \(meanOff)")
+    }
+
+    @Test func noFalseAlarmInASteadyRoom() {
+        for seed in 1...10 as ClosedRange<UInt64> {
+            let f = run(to: 17, minutes: 12 * 60, tuning: RoomFilter.Tuning(), seed: seed)
+            #expect(!f.changeDetected && abs(f.room - 17) < 2 * f.roomSD)
+        }
+    }
+
+    @Test func lowTrustObservationsCannotTriggerIt() {
+        var f = RoomFilter(room: 17, roomSD: 0.3)
+        for _ in 0..<720 { f.predict(dt: 5); f.observeModel(30, trust: 0.1) }   // e.g. charging heat
+        #expect(!f.changeDetected)
+    }
+}

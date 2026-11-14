@@ -30,6 +30,14 @@ public struct RoomFilter: Sendable {
         public var slowSD = 0.85
         /// Independent noise of one model observation (°C).
         public var observationSD = 0.3
+        /// Change detection: if the model's readings stay this far (°C) from the estimate,
+        /// averaged over `changeWindow` seconds, the room is taken to have really changed
+        /// (e.g. the Mac was carried to another room) and the filter catches up quickly.
+        /// `nil` disables it. 5 °C: on real data (replay 2026-11-14) 4 °C fired falsely
+        /// on a bad model afternoon, 5 °C did not; in simulation a move from 17 °C to
+        /// 5 °C then shows ≈ 11 °C after 1 h and ≈ 7.5 °C after 2 h (≈ 15 / 14 °C without).
+        public var changeThreshold: Double? = 5.0
+        public var changeWindow = 1200.0
 
         public init() {}
 
@@ -48,6 +56,12 @@ public struct RoomFilter: Sendable {
     public private(set) var p: [[Double]]
     public let tuning: Tuning
 
+    /// Smoothed gap between model observations and the room estimate (°C), for change detection.
+    public private(set) var innovationMean = 0.0
+    /// True while a detected room change is being followed.
+    public private(set) var changeDetected = false
+    private var sinceLastObservation = 0.0
+
     public var room: Double { x[0] }
     public var bias: Double { x[1] + x[2] }
     public var roomSD: Double { p[0][0].squareRoot() }
@@ -63,6 +77,7 @@ public struct RoomFilter: Sendable {
     /// Propagates the state over `dt` seconds: x ← F x, P ← F P Fᵀ + Q.
     public mutating func predict(dt: Double) {
         guard dt > 0 else { return }
+        sinceLastObservation += dt
         let f = [1, exp(-dt / tuning.fastTau), exp(-dt / tuning.slowTau)]
         let q = [tuning.roomWalk * tuning.roomWalk * dt / 3600,
                  tuning.fastSD * tuning.fastSD * (1 - f[1] * f[1]),
@@ -90,6 +105,32 @@ public struct RoomFilter: Sendable {
     /// counts: the observation variance is divided by it.
     public mutating func observeModel(_ y: Double, trust: Double = 1) {
         guard trust > 0 else { return }
+        // Only full-trust observations can signal a room change: charging and the first
+        // hour after wake are when the model errs most (and when it looked like a change
+        // on real data, 2026-11-14).
+        if let threshold = tuning.changeThreshold, trust >= 1 {
+            // How far the model's readings sit from the *room estimate* — the model error
+            // the filter would have to believe in. Normally ≈ 1.9 °C SD; held beyond the
+            // threshold for ~`changeWindow` it is not a plausible model error any more.
+            let gap = y - x[0]
+            // Gaps (sleep, recorder off) reset the running mean.
+            let a = sinceLastObservation > 600 ? 0 : exp(-sinceLastObservation / tuning.changeWindow)
+            innovationMean = a * innovationMean + (1 - a) * gap
+            changeDetected = abs(innovationMean) > threshold
+            if changeDetected {
+                // The room really changed: stop blaming the model (clear the error
+                // states) and make the room at least this uncertain, so the estimate
+                // follows the new level. Ends by itself once the estimate has caught up.
+                x[1] = 0
+                x[2] = 0
+                p[0][1] = 0; p[1][0] = 0; p[0][2] = 0; p[2][0] = 0; p[1][2] = 0; p[2][1] = 0
+                p[1][1] = tuning.fastSD * tuning.fastSD
+                p[2][2] = tuning.slowSD * tuning.slowSD
+                let g2 = innovationMean * innovationMean
+                if p[0][0] < g2 { p[0][0] = g2 }
+            }
+        }
+        sinceLastObservation = 0
         update(y, h: [1, 1, 1], r: tuning.observationSD * tuning.observationSD / trust)
     }
 
@@ -112,5 +153,7 @@ public struct RoomFilter: Sendable {
     /// A direct room observation, e.g. a night-cooling estimate at a cold-start anchor.
     public mutating func observeRoom(_ y: Double, sd: Double) {
         update(y, h: [1, 0, 0], r: sd * sd)
+        innovationMean = 0
+        changeDetected = false
     }
 }
