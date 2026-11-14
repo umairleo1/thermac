@@ -25,12 +25,21 @@ enum Snapshot {
 
     /// Hosts the view in a real (off-screen) window so native AppKit controls render too.
     private static func write(_ view: some View, dark: Bool, to url: URL) async {
-        let host = NSHostingView(rootView: view)
+        // Opaque panel background, rounded corners and a hairline border, so the image
+        // reads correctly on both light and dark pages (e.g. GitHub's themes).
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        let framed = view
+            .background(Color(nsColor: .windowBackgroundColor))
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1))
+            .padding(1)
+        let host = NSHostingView(rootView: framed)
         let size = host.fittingSize
         let window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: size.width, height: size.height),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-        window.backgroundColor = .windowBackgroundColor
+        window.backgroundColor = .clear
+        window.isOpaque = false
         window.contentView = host
         window.orderFrontRegardless()
         try? await Task.sleep(for: .milliseconds(800))      // let charts and controls lay out
