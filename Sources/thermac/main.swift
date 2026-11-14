@@ -83,7 +83,12 @@ case "estimate":
 case "now":
     Commands.now(dbPath: dbPath, bench: args.contains("--bench"))
 case "replay":
-    Commands.replay(dbPath: dbPath, verbose: args.contains("-v"), weighting: !args.contains("--no-weighting"))
+    {
+        var t = RoomFilter.Tuning()
+        if let v = option("--change") { t.changeThreshold = Double(v).flatMap { $0 > 0 ? $0 : nil } }
+        if let v = option("--change-window").flatMap(Double.init) { t.changeWindow = v }
+        Commands.replay(dbPath: dbPath, verbose: args.contains("-v"), weighting: !args.contains("--no-weighting"), tuning: t)
+    }()
 case "calibrate":
     Commands.calibrate(dbPath: dbPath, verbose: args.contains("-v"))
 case "validate":

@@ -15,7 +15,12 @@ final class BarModel: ObservableObject {
 
     let prefs = Preferences.shared
     let recorder = RecorderManager()
-    private let estimator = LiveEstimator()
+    /// Developer option `--db PATH` points the app at another database (UI testing).
+    private let estimator: LiveEstimator = {
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--db"), i + 1 < args.count { return LiveEstimator(dbPath: args[i + 1]) }
+        return LiveEstimator()
+    }()
     private let log = Logger(subsystem: "com.thermac.bar", category: "estimate")
     private var loop: Task<Void, Never>?
     private var bag: Set<AnyCancellable> = []

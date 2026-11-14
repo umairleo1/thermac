@@ -5,7 +5,7 @@ extension Commands {
     /// Phase 5 exit test: replays the log through the room filter and, at the end of each
     /// day, predicts the next good night's room temperature before seeing it.
     /// Each day uses a transfer model calibrated on the *other* days (leave-one-day-out).
-    static func replay(dbPath: String, verbose: Bool, weighting: Bool = true) {
+    static func replay(dbPath: String, verbose: Bool, weighting: Bool = true, tuning: RoomFilter.Tuning = RoomFilter.Tuning()) {
         do {
             let store = try SampleStore(path: dbPath)
             let candidates = try store.channelNames()
@@ -41,7 +41,7 @@ extension Commands {
                     f.observeRoom(night.room, sd: max(night.spread, 0.25))
                     filter = f
                 } else {
-                    filter = RoomFilter(room: night.room, roomSD: max(night.spread, 0.25))
+                    filter = RoomFilter(room: night.room, roomSD: max(night.spread, 0.25), tuning: tuning)
                 }
                 var f = filter!
                 var prev = input.t[0]
