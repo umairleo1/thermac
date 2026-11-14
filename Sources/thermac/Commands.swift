@@ -65,11 +65,13 @@ enum Commands {
         var groups: [(String, (Channel) -> Bool)] = SensorCategory.allCases.map { cat in
             ("temperature · \(cat.rawValue)", { $0.kind == .temperature && $0.category == cat })
         }
-        groups += [
-            ("power", { $0.kind == .power }),
-            ("fans", { $0.kind == .fan }),
-            ("system state", { $0.kind == .state }),
-        ]
+        // Explicit closure types keep older compilers from timing out on type inference.
+        let isPower: (Channel) -> Bool = { $0.kind == .power }
+        let isFan: (Channel) -> Bool = { $0.kind == .fan }
+        let isState: (Channel) -> Bool = { $0.kind == .state }
+        groups.append(("power", isPower))
+        groups.append(("fans", isFan))
+        groups.append(("system state", isState))
         for (title, match) in groups {
             let rows = readings.filter { match($0.channel) }
             guard !rows.isEmpty else { continue }
