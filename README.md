@@ -125,7 +125,7 @@ second one. You can switch it over in **Settings → Background recording**.
 
 ## Using thermac
 
-**Menu bar:** the current room temperature, e.g. `🌡 18°`. A `?` means the recorder has
+**Menu bar:** the current room temperature, e.g. `🌡 17.6°` (or whole degrees, set in Settings). A `?` means the recorder has
 stopped.
 
 **Panel:** the estimate (to one decimal) with its uncertainty, the trend over the last

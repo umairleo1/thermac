@@ -21,10 +21,10 @@ struct SettingsView: View {
                     Text("Fahrenheit (°F)").tag(TemperatureUnitPreference.fahrenheit)
                 }
                 Picker("Menu bar precision", selection: $prefs.decimals) {
-                    Text("Whole degrees").tag(0)
                     Text("One decimal").tag(1)
+                    Text("Whole degrees").tag(0)
                 }
-                Text("The estimate is good to about ± 1 °C. The panel always shows one decimal and the trend.")
+                Text("The estimate is good to about ± 1 °C. With whole degrees the menu bar rounds (17.6 shows as 18°); the panel always shows one decimal.")
                     .font(.caption).foregroundStyle(.secondary)
                 Picker("Refresh", selection: $prefs.refreshMinutes) {
                     Text("Every minute").tag(1)
