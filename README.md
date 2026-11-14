@@ -18,9 +18,9 @@
 </p>
 
 <p align="center">
-  <img src="assets/panel-light.png" width="330" alt="thermac menu bar panel, light mode">
+  <img src="assets/screenshot-panel-light.png" width="330" alt="thermac menu bar panel, light mode">
   &nbsp;&nbsp;
-  <img src="assets/panel-dark.png" width="330" alt="thermac menu bar panel, dark mode">
+  <img src="assets/screenshot-panel-dark.png" width="330" alt="thermac menu bar panel, dark mode">
 </p>
 
 ---
@@ -127,7 +127,7 @@ hours (hover to read values), last night's value, and recording status.
 rate, open at login, and background recording.
 
 <p align="center">
-  <img src="assets/settings.png" width="440" alt="thermac settings window">
+  <img src="assets/screenshot-settings.png" width="440" alt="thermac settings window">
 </p>
 
 ### Command-line tool
