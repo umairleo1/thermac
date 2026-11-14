@@ -1,0 +1,36 @@
+name: Mac report
+description: Share how thermac works on your Mac (most helpful contribution!)
+title: "Mac report: <model>"
+labels: ["mac-report"]
+body:
+  - type: input
+    id: model
+    attributes:
+      label: Mac model
+      description: Apple menu → About This Mac (e.g. "MacBook Air M2, 2022")
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "15.1"
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `thermac doctor`
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: sensors
+    attributes:
+      label: Output of `thermac sensors`
+      render: text
+  - type: textarea
+    id: comparison
+    attributes:
+      label: Comparison with a thermometer (optional)
+      description: thermac's reading, the thermometer's reading, the time, and the conditions (heating, window, where the Mac was).

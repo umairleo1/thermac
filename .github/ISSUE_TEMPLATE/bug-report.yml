@@ -1,0 +1,28 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you expected, and what happened instead. Screenshots help.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: input
+    id: model
+    attributes:
+      label: Mac model and macOS version
+      placeholder: "MacBook Pro M3, macOS 15.1"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (optional)
+      description: "`log show --last 1h --predicate 'subsystem == \"com.thermac.bar\"'`"
+      render: text
