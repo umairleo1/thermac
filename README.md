@@ -80,7 +80,7 @@ scripts/bundle-app.sh --install
 open ~/Applications/ThermacBar.app
 ```
 
-This builds the app and copies it to `~/Applications`. It appears in the menu bar as a
+This builds the app and moves it to `~/Applications`. It appears in the menu bar as a
 thermometer.
 
 ### 3. Start recording

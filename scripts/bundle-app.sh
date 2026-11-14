@@ -3,7 +3,7 @@
 # The app embeds the recorder (Contents/MacOS/thermac) and its login agent
 # (Contents/Library/LaunchAgents/com.thermac.bar.recorder.plist), which the app
 # registers with SMAppService — installing the app is the only setup step.
-# Usage: scripts/bundle-app.sh [--install]   (--install copies it to ~/Applications)
+# Usage: scripts/bundle-app.sh [--install]   (--install moves it to ~/Applications)
 set -eu
 cd "$(dirname "$0")/.."
 VERSION="0.2.0"
@@ -69,6 +69,7 @@ echo "built $APP ($VERSION, build $BUILD)"
 if [ "${1:-}" = "--install" ]; then
     mkdir -p "$HOME/Applications"
     rm -rf "$HOME/Applications/ThermacBar.app"
-    cp -R "$APP" "$HOME/Applications/"
+    # Move, not copy: a second identical app in dist/ would show up in Spotlight/Launchpad.
+    mv "$APP" "$HOME/Applications/"
     echo "installed ~/Applications/ThermacBar.app"
 fi
