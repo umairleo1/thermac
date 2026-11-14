@@ -64,26 +64,34 @@ Desktop Macs (mini, Studio, iMac) have no battery sensors, so expect lower accur
 
 ## Installation
 
-There are no pre-built downloads yet; build it from source. It takes about a minute.
+Paste this in Terminal:
 
-### 1. Get the code
+```sh
+curl -fsSL https://raw.githubusercontent.com/umairleo1/thermac/main/install.sh | sh
+```
+
+The installer checks your Mac, downloads the source, builds it (about a minute), installs
+`thermac.app` to `~/Applications`, links the `thermac` command to `~/.local/bin`, and opens
+the app. It needs no sudo and installs nothing outside your home folder.
+[Read the script](install.sh) first if you like; that's good practice with any `curl | sh`.
+
+> [!NOTE]
+> It builds from source, so you need the **Xcode Command Line Tools**. If they're missing,
+> the installer tells you to run `xcode-select --install` first.
+
+<details>
+<summary>Install manually instead</summary>
 
 ```sh
 git clone https://github.com/umairleo1/thermac.git
 cd thermac
-```
-
-### 2. Build and install the menu bar app
-
-```sh
 scripts/bundle-app.sh --install
 open ~/Applications/ThermacBar.app
 ```
 
-This builds the app and moves it to `~/Applications`. It appears in the menu bar as a
-thermometer.
+</details>
 
-### 3. Start recording
+### After installing: start recording
 
 Click the thermometer in the menu bar, then **Start Recording**. If macOS asks, allow
 thermac in **System Settings → General → Login Items**.
@@ -91,7 +99,7 @@ thermac in **System Settings → General → Login Items**.
 The recorder runs in the background at login. It reads the sensors every 5 seconds, uses
 about 0.03 % CPU, and stores about 10 MB a day (older data is thinned automatically).
 
-### 4. Let it sleep
+### Then let it sleep
 
 Close the lid overnight, or let the Mac sleep for **2 hours or more**. The first estimate
 appears after the first night, and the live estimate after the second night with a day of
@@ -156,17 +164,18 @@ about an hour but jitters more), open at login, and background recording.
 
 Run `thermac help` for all options.
 
+## Updating
+
+Run the install command again. It rebuilds the latest version and keeps your recorded data.
+
 ## Uninstalling
 
-1. Click the thermometer, then **⋯ → Settings… → Stop Recording**, then **⋯ → Quit thermac**.
-2. Delete `~/Applications/ThermacBar.app`.
-3. Optionally delete the recorded data:
-   ```sh
-   rm -rf ~/Library/Application\ Support/thermac
-   ```
+```sh
+curl -fsSL https://raw.githubusercontent.com/umairleo1/thermac/main/install.sh | sh -s -- --uninstall
+```
 
-If you installed the recorder from the command line, also run
-`.build/release/thermac agent uninstall`.
+This removes the app, the background recorder and the `thermac` command. Your recorded data
+is kept; add `--purge` to delete it too.
 
 ## Privacy
 
