@@ -120,11 +120,19 @@ second one. You can switch it over in **Settings → Background recording**.
 **Menu bar:** the current room temperature, e.g. `🌡 18°`. A `?` means the recorder has
 stopped.
 
-**Panel:** the estimate with its uncertainty, what it's based on, a chart of the last 24
-hours (hover to read values), last night's value, and recording status.
+**Panel:** the estimate (to one decimal) with its uncertainty, the trend over the last
+hour, what it's based on, a chart of the last 24 hours (hover to read values), last
+night's value, and recording status.
 
-**Settings:** units (°C, °F, or your system setting), whole degrees or one decimal, refresh
-rate, open at login, and background recording.
+**Settings:** units (°C, °F, or your system setting), menu bar precision, refresh rate,
+response (*Steady*, the default and most accurate, or *Responsive*, which reacts within
+about an hour but jitters more), open at login, and background recording.
+
+> [!NOTE]
+> **Why the number moves slowly.** A Mac is a block of aluminium and battery that takes
+> hours to warm up or cool down, and it heats itself whenever it's busy. A real room change,
+> like opening a window, shows up over the next hour or two, not instantly. The panel's
+> trend line ("Down 0.3 °C in the last hour") shows the movement as it happens.
 
 <p align="center">
   <img src="assets/screenshot-settings.png" width="440" alt="thermac settings window">
