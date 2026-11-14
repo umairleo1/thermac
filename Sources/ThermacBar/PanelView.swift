@@ -18,7 +18,7 @@ struct PanelView: View {
             header
             setupCallout
             if let e = model.estimate, e.history.count > 1 {
-                HistoryChart(history: e.history, format: model.format, selection: $model.selection)
+                HistoryChart(history: e.history, format: model.panelFormat, selection: $model.selection)
             }
             details
             Divider()
@@ -36,12 +36,12 @@ struct PanelView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(model.estimate?.room.map(model.format.full) ?? "—")
+                Text(model.estimate?.room.map(model.panelFormat.full) ?? "—")
                     .font(.system(size: 36, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText())
                 if let sd = model.estimate?.roomSD {
-                    Text(model.format.uncertainty(sd))
+                    Text(model.panelFormat.uncertainty(sd))
                         .font(.title3)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
@@ -49,6 +49,13 @@ struct PanelView: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(model.accessibilitySummary)
+
+            if let trend = model.trend {
+                Label(trend.text, systemImage: trend.symbol)
+                    .font(.callout.weight(.medium))
+                    .monospacedDigit()
+                    .accessibilityHidden(true)   // included in the summary above
+            }
 
             if let problem = model.problem {
                 Label(problem, systemImage: "exclamationmark.triangle.fill")
@@ -65,6 +72,7 @@ struct PanelView: View {
     private func sourceText(_ s: LiveEstimate.Source) -> String {
         switch s {
         case .filter: "Based on \(model.estimate?.goodNights ?? 0) nights and today's sensor readings"
+            + (model.prefs.responsive ? " · responsive mode" : "")
         case .night: "Based on last night only — gets better after a second night"
         case .waiting: "Waiting for the first night — close the lid for 2 hours or more"
         case .stale: "Recording has stopped — this value is getting older"
@@ -132,7 +140,7 @@ struct PanelView: View {
             if let n = model.estimate?.lastNight {
                 GridRow {
                     Text("Last night").foregroundStyle(.secondary)
-                    Text("\(model.format.full(n.room)) · woke \(Date(timeIntervalSince1970: n.time).formatted(.dateTime.weekday(.abbreviated).hour().minute()))")
+                    Text("\(model.panelFormat.full(n.room)) · woke \(Date(timeIntervalSince1970: n.time).formatted(.dateTime.weekday(.abbreviated).hour().minute()))")
                 }
             }
             GridRow {

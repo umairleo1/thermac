@@ -20,17 +20,29 @@ struct SettingsView: View {
                     Text("Celsius (°C)").tag(TemperatureUnitPreference.celsius)
                     Text("Fahrenheit (°F)").tag(TemperatureUnitPreference.fahrenheit)
                 }
-                Picker("Precision", selection: $prefs.decimals) {
+                Picker("Menu bar precision", selection: $prefs.decimals) {
                     Text("Whole degrees").tag(0)
                     Text("One decimal").tag(1)
                 }
-                Text("The estimate is good to about ± 1 °C, so whole degrees are recommended.")
+                Text("The estimate is good to about ± 1 °C. The panel always shows one decimal and the trend.")
                     .font(.caption).foregroundStyle(.secondary)
                 Picker("Refresh", selection: $prefs.refreshMinutes) {
                     Text("Every minute").tag(1)
                     Text("Every 5 minutes").tag(5)
                     Text("Every 15 minutes").tag(15)
                 }
+            }
+
+            Section("Estimate") {
+                Picker("Response", selection: $prefs.responsive) {
+                    Text("Steady — most accurate").tag(false)
+                    Text("Responsive — reacts faster").tag(true)
+                }
+                Text(prefs.responsive
+                     ? "Shows most of a room change within about an hour, but jitters more and is less accurate."
+                     : "Shows room changes over a few hours. Your Mac itself takes hours to cool or warm, so this is the most accurate.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("General") {
