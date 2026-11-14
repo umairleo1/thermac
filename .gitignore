@@ -1,0 +1,8 @@
+.build/
+.swiftpm/
+*.csv
+.DS_Store
+dist/
+
+# Internal planning notes (not published)
+docs/
