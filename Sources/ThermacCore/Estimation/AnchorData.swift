@@ -94,6 +94,33 @@ public enum AnchorData {
         return t1 > t0 ? v0 + (v1 - v0) * (t - t0) / (t1 - t0) : v1
     }
 
+    /// The room reference for one awake day, tick by tick, or `NaN` where the place is
+    /// unknown. A day runs from a good night's wake (`night.end`) to the next sleep session.
+    ///
+    /// - Before the first long absence (lid closed ≥ `minGap`), the Mac is where it spent
+    ///   the night: reference = that night's room.
+    /// - After the last long absence, it is where it spends the *next* night — but only if
+    ///   that next session is a good night (`next`); otherwise unknown.
+    /// - In between (e.g. at the office), unknown.
+    /// - With no long absence and a good next night, the room is interpolated linearly
+    ///   between the two nights, as before.
+    ///
+    /// On real data (2026-11-15) mixing an office afternoon into the home reference had
+    /// inflated the worst next-night error from 0.34 °C to 1.45 °C and created a spurious
+    /// "slow model error".
+    public static func dayReference(t: [Double], night: Night, next: Night?, nights: [Night],
+                                    minGap: Double = 1800) -> [Double] {
+        let away = RoomFilter.absences(t).filter { $0.value >= minGap }.keys.sorted()
+        guard let firstAway = away.first, let lastAway = away.last else {
+            return t.map { next != nil ? reference(nights, at: $0) : night.room }
+        }
+        return t.indices.map { j in
+            if j < firstAway { return night.room }
+            if j >= lastAway, let next { return next.room }
+            return .nan
+        }
+    }
+
     /// Sensors usable everywhere: consistent at every good anchor.
     public static func commonSensors(_ nights: [Night], candidates: [String]) -> [String] {
         nights.map(\.consistent).reduce(Set(candidates)) { $0.intersection($1) }.sorted()
@@ -105,12 +132,14 @@ public enum AnchorData {
                                      minHours: Double = 1.5) throws -> [AwakeSegment] {
         var out: [AwakeSegment] = []
         for (i, n) in nights.enumerated() {
-            let end = sessionStarts.first { $0 > n.end + 60 } ?? now
+            let end = sessionStarts.filter { $0 > n.end + 60 }.min() ?? now
             guard end - n.end >= minHours * 3600,
                   let input = try loadInput(store, from: n.end, to: end, sensors: sensors) else { continue }
-            out.append(AwakeSegment(night: i, bracketed: i + 1 < nights.count,
-                                    seg: TransferCalibration.Segment(input: input,
-                                                                     reference: input.t.map { reference(nights, at: $0) })))
+            // The next good night counts only if it is the very next sleep session.
+            let next = i + 1 < nights.count && abs(nights[i + 1].start - end) < 60 ? nights[i + 1] : nil
+            let ref = dayReference(t: input.t, night: n, next: next, nights: nights)
+            out.append(AwakeSegment(night: i, bracketed: next != nil,
+                                    seg: TransferCalibration.Segment(input: input, reference: ref)))
         }
         return out
     }

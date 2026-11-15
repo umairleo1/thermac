@@ -17,7 +17,8 @@ public enum TransferCalibration {
     /// One awake period starting at a cold-start anchor (filters start at 0).
     public struct Segment: Sendable {
         public let input: PowerResponse.Input
-        /// Reference room temperature at each tick.
+        /// Reference room temperature at each tick; `NaN` where the place is unknown
+        /// (those ticks still drive the model's lag states but are not fitted).
         public let reference: [Double]
 
         public init(input: PowerResponse.Input, reference: [Double]) {
@@ -79,7 +80,7 @@ public enum TransferCalibration {
                             let s = seg.input.sensors[name]!
                             let x1 = powerLag[i][t1]!, x2 = powerLag[i][t2]!
                             let xc = tc > 0 ? chargeLag[i][tc]! : nil
-                            for j in s.indices {
+                            for j in s.indices where seg.reference[j].isFinite {
                                 guard let v = s[j] else { continue }
                                 rows.append([x1[j], x2[j]] + (xc.map { [$0[j]] } ?? []))
                                 y.append(v - seg.reference[j])

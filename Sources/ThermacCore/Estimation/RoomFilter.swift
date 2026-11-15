@@ -5,45 +5,55 @@ import Foundation
 /// State `[T, b_fast, b_slow]`:
 /// - `T` — room temperature, a slow random walk.
 /// - `b_fast`, `b_slow` — the transfer-function model's error, shared by all sensors,
-///   as two AR(1) processes back to 0. Measured on held-out real days (2026-11-14):
-///   SD 1.9 °C with autocorrelation 0.40 at 30 min, 0.10 at 1 h, ≈ 0.2 at 2–4 h —
-///   i.e. a large error that fades in ~30 min (wake-up transients, charging, load
-///   steps) plus ≈ 0.85 °C that persists for hours (placement, day-level offsets).
-///   The fast part is averaged away; the slow part is indistinguishable from a room
-///   change within a day, so it shows up honestly in the reported `±`.
+///   as two AR(1) processes back to 0. The fast part (wake-up transients, charging, load
+///   steps) is averaged away; anything slower is indistinguishable from a room change
+///   within a day and shows up in the reported `±`.
 ///
 /// Observations:
 /// - the model's room estimate `y = T + b_fast + b_slow + e` (median over sensors);
 /// - a cold-start / night estimate `y = T + e`, at each anchor.
 ///
+/// **Relocation:** laptops are carried with the lid closed. After the Mac has been away
+/// (asleep) for `relocationGap` or longer during the day, the room may be a different
+/// one, so the filter widens the room's uncertainty and stops blaming the model; the
+/// estimate then re-converges at the new place within about the Mac's own response time.
+///
 /// The model is linear, so this is a plain Kalman filter (the plan said EKF because the
 /// physical RC model was nonlinear in its parameters).
 public struct RoomFilter: Sendable {
     public struct Tuning: Sendable {
-        /// Room random walk, °C per √hour.
+        /// Room random walk, °C per √hour. Kept at 0.5: faster settings only added noise
+        /// at home (tracking RMS 0.52 → 1.12 °C at 1.5); moves are handled by `relocation*`
+        /// and `changeThreshold` instead.
         public var roomWalk = 0.5
-        /// Fast model error: persistence (s) and stationary SD (°C).
-        public var fastTau = 1800.0
-        public var fastSD = 1.7
-        /// Slow model error: persistence (s) and stationary SD (°C).
+        /// Model error, measured on held-out real days at known places (2026-11-15):
+        /// SD 1.8 °C, autocorrelation 0.51 / 0.24 / 0.11 / −0.01 at 30 min / 1 h / 2 h / 4 h —
+        /// one fast component (τ ≈ 45 min) plus a small slow remainder. (An earlier, larger
+        /// "slow error" of 0.85 °C turned out to be an office afternoon mislabelled as home.)
+        public var fastTau = 2700.0
+        public var fastSD = 1.75
         public var slowTau = 6 * 3600.0
-        public var slowSD = 0.85
+        public var slowSD = 0.35
         /// Independent noise of one model observation (°C).
         public var observationSD = 0.3
         /// Change detection: if the model's readings stay this far (°C) from the estimate,
         /// averaged over `changeWindow` seconds, the room is taken to have really changed
-        /// (e.g. the Mac was carried to another room) and the filter catches up quickly.
-        /// `nil` disables it. 5 °C: on real data (replay 2026-11-14) 4 °C fired falsely
-        /// on a bad model afternoon, 5 °C did not; in simulation a move from 17 °C to
-        /// 5 °C then shows ≈ 11 °C after 1 h and ≈ 7.5 °C after 2 h (≈ 15 / 14 °C without).
+        /// and the filter catches up quickly. `nil` disables it.
         public var changeThreshold: Double? = 5.0
         public var changeWindow = 1200.0
+        /// An absence (asleep, lid closed) at least this long (s) may mean a new place.
+        public var relocationGap = 1800.0
+        /// After such an absence the room is at least this uncertain (°C, 1 σ). A trade-off,
+        /// measured in simulation (move 18 → 22 °C vs. a break in the same room, shown 1 h
+        /// after waking): off 19.5 °C / 0.57 °C RMS · 1.5 → 20.4 °C / 0.89 °C ·
+        /// 2 → 20.7 °C / 1.03 °C · 3 → 21.0 °C / 1.19 °C. 1.5 keeps breaks at home inside
+        /// the ± 1 °C the app shows; the model's own ~45-min error limits anything faster.
+        public var relocationSD = 1.5
 
         public init() {}
 
-        /// Opt-in faster tracking: shows most of a room change within ~50 min instead of
-        /// ~3 h, at the cost of ~0.35 °C jitter and larger errors on real data (replay
-        /// 2026-11-14: worst next-night error 2.13 °C vs 1.46 °C).
+        /// Opt-in faster tracking: a larger room random walk follows changes sooner at
+        /// the cost of more jitter.
         public static var responsive: Tuning {
             var t = Tuning()
             t.roomWalk = 1.0
@@ -74,6 +84,8 @@ public struct RoomFilter: Sendable {
              [0, 0, tuning.slowSD * tuning.slowSD]]
     }
 
+    // MARK: Kalman steps
+
     /// Propagates the state over `dt` seconds: x ← F x, P ← F P Fᵀ + Q.
     public mutating func predict(dt: Double) {
         guard dt > 0 else { return }
@@ -101,31 +113,31 @@ public struct RoomFilter: Sendable {
         for i in 0..<3 { for j in 0..<i { let m = (p[i][j] + p[j][i]) / 2; p[i][j] = m; p[j][i] = m } }
     }
 
+    /// Clears the model-error states: from here on, differences are attributed to the room.
+    private mutating func resetModelError() {
+        x[1] = 0
+        x[2] = 0
+        p[0][1] = 0; p[1][0] = 0; p[0][2] = 0; p[2][0] = 0; p[1][2] = 0; p[2][1] = 0
+        p[1][1] = tuning.fastSD * tuning.fastSD
+        p[2][2] = tuning.slowSD * tuning.slowSD
+    }
+
     /// The transfer model's room estimate at this tick. `trust` (0–1] scales how much it
     /// counts: the observation variance is divided by it.
     public mutating func observeModel(_ y: Double, trust: Double = 1) {
         guard trust > 0 else { return }
         // Only full-trust observations can signal a room change: charging and the first
-        // hour after wake are when the model errs most (and when it looked like a change
-        // on real data, 2026-11-14).
+        // hour after wake are when the model errs most.
         if let threshold = tuning.changeThreshold, trust >= 1 {
-            // How far the model's readings sit from the *room estimate* — the model error
-            // the filter would have to believe in. Normally ≈ 1.9 °C SD; held beyond the
-            // threshold for ~`changeWindow` it is not a plausible model error any more.
+            // How far the model's readings sit from the *room estimate*: the model error the
+            // filter would have to believe in. Held beyond the threshold for ~`changeWindow`
+            // it is no longer a plausible model error.
             let gap = y - x[0]
-            // Gaps (sleep, recorder off) reset the running mean.
             let a = sinceLastObservation > 600 ? 0 : exp(-sinceLastObservation / tuning.changeWindow)
             innovationMean = a * innovationMean + (1 - a) * gap
             changeDetected = abs(innovationMean) > threshold
             if changeDetected {
-                // The room really changed: stop blaming the model (clear the error
-                // states) and make the room at least this uncertain, so the estimate
-                // follows the new level. Ends by itself once the estimate has caught up.
-                x[1] = 0
-                x[2] = 0
-                p[0][1] = 0; p[1][0] = 0; p[0][2] = 0; p[2][0] = 0; p[1][2] = 0; p[2][1] = 0
-                p[1][1] = tuning.fastSD * tuning.fastSD
-                p[2][2] = tuning.slowSD * tuning.slowSD
+                resetModelError()
                 let g2 = innovationMean * innovationMean
                 if p[0][0] < g2 { p[0][0] = g2 }
             }
@@ -134,26 +146,83 @@ public struct RoomFilter: Sendable {
         update(y, h: [1, 1, 1], r: tuning.observationSD * tuning.observationSD / trust)
     }
 
-    /// How much to trust the model at each tick of an awake segment. The largest fast
-    /// errors on real data came while charging (charge heat is not linear in charge
-    /// power) and in the first hour after wake (sensors rise faster than modelled).
-    public static func modelTrust(_ input: PowerResponse.Input, chargeHold: Double = 3600,
-                                  wakeHold: Double = 3600) -> [Double] {
-        var lastCharge = -Double.infinity
-        return input.t.indices.map { j in
-            let t = input.t[j]
-            if input.charge[j] > 5 { lastCharge = t }
-            var trust = 1.0
-            if t - input.t[0] < wakeHold { trust *= 0.25 }
-            if t - lastCharge <= chargeHold { trust *= 0.1 }
-            return trust
-        }
-    }
-
     /// A direct room observation, e.g. a night-cooling estimate at a cold-start anchor.
     public mutating func observeRoom(_ y: Double, sd: Double) {
         update(y, h: [1, 0, 0], r: sd * sd)
         innovationMean = 0
         changeDetected = false
+    }
+
+    /// The Mac was away (asleep) for `duration` seconds. If that is long enough to have
+    /// been carried somewhere else, the room becomes uncertain again.
+    public mutating func noteAbsence(_ duration: Double) {
+        guard duration >= tuning.relocationGap else { return }
+        resetModelError()
+        let floor = tuning.relocationSD * tuning.relocationSD
+        if p[0][0] < floor { p[0][0] = floor }
+        innovationMean = 0
+        changeDetected = false
+    }
+
+    // MARK: Driving the filter over recorded data
+
+    /// Longest step (s) between ticks that still counts as being awake. While asleep the
+    /// recorder only logs isolated readings at maintenance wakes (~15 min apart).
+    public static let awakeStep = 60.0
+
+    /// Absences inside a recording: for the first awake tick after each period asleep,
+    /// how long the Mac was away (from the last awake tick before it).
+    public static func absences(_ t: [Double], awakeStep: Double = RoomFilter.awakeStep) -> [Int: Double] {
+        guard t.count > 1 else { return [:] }
+        // A tick is "awake" if it has a neighbour within `awakeStep`.
+        let awake = t.indices.map { j in
+            (j > 0 && t[j] - t[j - 1] <= awakeStep) || (j + 1 < t.count && t[j + 1] - t[j] <= awakeStep)
+        }
+        var out: [Int: Double] = [:]
+        var lastAwake: Int?
+        for j in t.indices where awake[j] {
+            if let l = lastAwake, j > l + 1 || t[j] - t[l] > awakeStep { out[j] = t[j] - t[l] }
+            lastAwake = j
+        }
+        return out
+    }
+
+    /// How much to trust the model at each tick. The largest fast errors on real data came
+    /// while charging (charge heat is not linear in charge power) and in the first hour
+    /// after waking (sensors rise faster than modelled) — after the segment start and
+    /// after any absence of `wakeAfterGap` or more.
+    public static func modelTrust(_ input: PowerResponse.Input, chargeHold: Double = 3600,
+                                  wakeHold: Double = 3600, wakeAfterGap: Double = 1800) -> [Double] {
+        let away = absences(input.t)
+        var lastCharge = -Double.infinity
+        var lastWake = input.t.first ?? 0
+        return input.t.indices.map { j in
+            let t = input.t[j]
+            if let d = away[j], d >= wakeAfterGap { lastWake = t }
+            if input.charge[j] > 5 { lastCharge = t }
+            var trust = 1.0
+            if t - lastWake < wakeHold { trust *= 0.25 }
+            if t - lastCharge <= chargeHold { trust *= 0.1 }
+            return trust
+        }
+    }
+
+    /// Runs the filter over one recording (the single code path used by the live app and
+    /// by `thermac replay`): propagates between ticks, handles absences, and folds in the
+    /// model's room estimates. `observe` is called after every tick.
+    /// - Returns: the time of the last tick processed (or `from` if there were none).
+    @discardableResult
+    public mutating func run(_ input: PowerResponse.Input, predictions: [Double?], trust: [Double],
+                             from start: Double, observe: ((Double, RoomFilter) -> Void)? = nil) -> Double {
+        let away = Self.absences(input.t)
+        var t = start
+        for j in input.t.indices {
+            predict(dt: input.t[j] - t)
+            t = input.t[j]
+            if let d = away[j] { noteAbsence(d) }
+            if j < predictions.count, let y = predictions[j] { observeModel(y, trust: j < trust.count ? trust[j] : 1) }
+            observe?(t, self)
+        }
+        return t
     }
 }
