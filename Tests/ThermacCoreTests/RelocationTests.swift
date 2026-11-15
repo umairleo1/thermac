@@ -51,7 +51,7 @@ struct RelocationTests {
     @Test func followsAMoveMadeWithTheLidClosed() {
         // Home 18 °C until 3 h; lid closed 80 min (commute); office 22 °C afterwards.
         let wake = 3 * 3600.0 + 4800
-        let t = ticks(awake: [0...(3 * 3600), wake...(wake + 2 * 3600)])
+        let t = ticks(awake: [0.0...(3 * 3600.0), wake...(wake + 2 * 3600)])
         let room = { (x: Double) in x < 3 * 3600 + 1200 ? 18.0 : 22.0 }
         var noRelocation = RoomFilter.Tuning(); noRelocation.relocationGap = .infinity
         var with: [Double] = [], without: [Double] = []
@@ -68,7 +68,7 @@ struct RelocationTests {
 
     @Test func aLunchBreakAtHomeDoesNoHarm() {
         let wake = 3 * 3600.0 + 4800
-        let t = ticks(awake: [0...(3 * 3600), wake...(wake + 2 * 3600)])
+        let t = ticks(awake: [0.0...(3 * 3600.0), wake...(wake + 2 * 3600)])
         let oneHourIn = t.firstIndex { $0 >= wake + 3600 }!
         var errors: [Double] = []
         for seed in 1...10 as ClosedRange<UInt64> {
