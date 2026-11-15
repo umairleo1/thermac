@@ -28,6 +28,9 @@ extension Commands {
             var filter: RoomFilter?
             var lastT: Double?
             var filterErrors: [Double] = [], modelErrors: [Double] = []
+            var trackSq = 0.0, trackN = 0
+            var steps: [Double] = []
+            var lastRoom: (t: Double, room: Double)?
             for (i, s) in segments.enumerated() {
                 let others = segments.enumerated().filter { $0.offset != i }.map(\.element.seg)
                 guard let model = TransferCalibration.calibrate(others) else { continue }
@@ -44,23 +47,33 @@ extension Commands {
                     filter = RoomFilter(room: night.room, roomSD: max(night.spread, 0.25), tuning: tuning)
                 }
                 var f = filter!
-                var prev = input.t[0]
                 let trust = weighting ? RoomFilter.modelTrust(input) : input.t.map { _ in 1 }
-                for j in input.t.indices {
-                    f.predict(dt: input.t[j] - prev)
-                    prev = input.t[j]
-                    if let y = pred[j] { f.observeModel(y, trust: trust[j]) }
+                var j = 0
+                f.run(input, predictions: pred, trust: trust, from: input.t[0]) { time, state in
                     if verbose, j % 360 == 0 {
-                        print("      \(when(input.t[j]))  model \(fmt(pred[j]))  filter \(fmt(f.room)) ± \(fmt(f.roomSD))  bias \(signed(f.bias))")
+                        print("      \(when(time))  model \(fmt(pred[j]))  filter \(fmt(state.room)) ± \(fmt(state.roomSD))  bias \(signed(state.bias))")
                     }
+                    // Tracking metric: filter vs. the room reference, where it is defined.
+                    let ref = s.seg.reference[j]
+                    if ref.isFinite {
+                        trackSq += (state.room - ref) * (state.room - ref); trackN += 1
+                        if let last = lastRoom, time - last.t >= 300 { steps.append(state.room - last.room); lastRoom = (time, state.room) }
+                        if lastRoom == nil { lastRoom = (time, state.room) }
+                    } else {
+                        lastRoom = nil
+                    }
+                    j += 1
                 }
                 filter = f
                 lastT = input.t.last!
 
                 let tail = zip(input.t, pred).filter { $0.0 >= input.t.last! - 3600 }.compactMap(\.1)
                 let modelEnd = tail.isEmpty ? nil : tail.reduce(0, +) / Double(tail.count)
-                let next = s.night + 1 < nights.count ? nights[s.night + 1].room : nil
-                var fErr = "—", mErr = "—"
+                // Score only days that stayed in one place: after a long absence (lid closed
+                // ≥ 30 min, e.g. a commute) the next night's room is not the right yardstick.
+                let moved = RoomFilter.absences(input.t).values.contains { $0 >= tuning.relocationGap }
+                let next = s.night + 1 < nights.count && !moved ? nights[s.night + 1].room : nil
+                var fErr = moved ? "moved — not scored" : "—", mErr = moved ? "" : "—"
                 if let next {
                     filterErrors.append(f.room - next)
                     fErr = signed(f.room - next)
@@ -73,6 +86,12 @@ extension Commands {
                 let mWorst = modelErrors.map(abs).max() ?? .nan
                 print("\n  next-night prediction: filter worst \(fmt(worst)) °C, model-only worst \(fmt(mWorst)) °C over \(filterErrors.count) day(s)")
                 print("  Phase 5 exit criterion (± 1.5 °C): \(worst <= 1.5 ? "MET" : "not met") on the data so far")
+            }
+            if trackN > 0 {
+                let rms = (trackSq / Double(trackN)).squareRoot()
+                let jitter = steps.count > 1
+                    ? (steps.map { $0 * $0 }.reduce(0, +) / Double(steps.count)).squareRoot() : .nan
+                print("  through the day: tracking RMS \(fmt(rms)) °C vs reference · jitter \(fmt(jitter, 3)) °C per 5 min")
             }
             if let f = filter { print("\n  room now (filter): \(fmt(f.room)) °C ± \(fmt(f.roomSD))") }
         } catch {

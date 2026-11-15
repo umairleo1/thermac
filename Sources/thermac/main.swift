@@ -87,6 +87,12 @@ case "replay":
         var t = RoomFilter.Tuning()
         if let v = option("--change") { t.changeThreshold = Double(v).flatMap { $0 > 0 ? $0 : nil } }
         if let v = option("--change-window").flatMap(Double.init) { t.changeWindow = v }
+        if let v = option("--walk").flatMap(Double.init) { t.roomWalk = v }
+        if let v = option("--slow-sd").flatMap(Double.init) { t.slowSD = v }
+        if let v = option("--fast-tau").flatMap(Double.init) { t.fastTau = v }
+        if let v = option("--fast-sd").flatMap(Double.init) { t.fastSD = v }
+        if let v = option("--relocation-gap").flatMap(Double.init) { t.relocationGap = v }
+        if let v = option("--relocation-sd").flatMap(Double.init) { t.relocationSD = v }
         Commands.replay(dbPath: dbPath, verbose: args.contains("-v"), weighting: !args.contains("--no-weighting"), tuning: t)
     }()
 case "calibrate":

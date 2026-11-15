@@ -86,14 +86,10 @@ public actor LiveEstimator {
         var history = pastHistory
         var t = start
         if let model, let input = try AnchorData.loadInput(store, from: start, to: now, sensors: sensors) {
-            let pred = TransferCalibration.predict(model, input)
-            let trust = RoomFilter.modelTrust(input)
             var nextMark = input.t[0]
-            for j in input.t.indices {
-                f.predict(dt: input.t[j] - t)
-                t = input.t[j]
-                if let y = pred[j] { f.observeModel(y, trust: trust[j]) }
-                if t >= nextMark { history.append((t, f.room, f.roomSD)); nextMark = t + 300 }
+            t = f.run(input, predictions: TransferCalibration.predict(model, input),
+                      trust: RoomFilter.modelTrust(input), from: t) { time, state in
+                if time >= nextMark { history.append((time, state.room, state.roomSD)); nextMark = time + 300 }
             }
         }
         f.predict(dt: max(0, now - t))
@@ -150,15 +146,13 @@ public actor LiveEstimator {
             guard i < nights.count - 1 else { break }
             if let model, let seg = segments.first(where: { $0.night == i }) {
                 let input = seg.seg.input
-                let pred = TransferCalibration.predict(model, input)
-                let trust = RoomFilter.modelTrust(input)
                 var nextMark = input.t[0]
-                for j in input.t.indices {
-                    f.predict(dt: input.t[j] - t)
-                    t = input.t[j]
-                    if let y = pred[j] { f.observeModel(y, trust: trust[j]) }
-                    if t >= nextMark { pastHistory.append((t, f.room, f.roomSD)); nextMark = t + 300 }
+                var marks: [(t: Double, room: Double, sd: Double)] = []
+                t = f.run(input, predictions: TransferCalibration.predict(model, input),
+                          trust: RoomFilter.modelTrust(input), from: t) { time, state in
+                    if time >= nextMark { marks.append((time, state.room, state.roomSD)); nextMark = time + 300 }
                 }
+                pastHistory += marks
             }
         }
         filterAtCurrentStart = f
