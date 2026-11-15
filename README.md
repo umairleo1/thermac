@@ -122,11 +122,13 @@ without a reference thermometer:
 |---|---|
 | Overnight estimate: agreement between ~27 independent sensors | ± 0.14–0.23 °C |
 | Overnight estimate vs. sensor readings at wake-up after long sleeps | within 0.1 °C |
-| Live estimate: predicting the next night's value at the end of each day | errors of +0.15 °C and +1.45 °C (2 days) |
+| Live estimate: predicting the next night's value at the end of a day spent in one place | −0.18 °C (1 day so far) |
+| Live estimate through the day vs. the overnight reference (at home) | 0.53 °C RMS, 0.1 °C jitter per 5 min |
 | Simulation with a known room temperature (realistic noise, 12 random scenarios) | within 0.2 °C |
 
-**Known error sources:** moving the Mac (desk ↔ lap ↔ bed), heavy charging, and the first
-hour after waking cause temporary errors of 1–3 °C. The ± shown in the app accounts for
+**Known error sources:** heavy charging and the first hour after waking cause temporary
+errors of 1–3 °C. When you carry the Mac somewhere else with the lid closed (e.g. to work),
+thermac treats the room as unknown again and re-converges over the next hour or two. The ± shown in the app accounts for
 this. Results from other Macs, and comparisons with real thermometers, are very welcome;
 see [Contributing](#contributing).
 
