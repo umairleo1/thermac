@@ -60,31 +60,36 @@ extension Commands {
                 let others = segments.enumerated().filter { $0.offset != i }.map(\.element.seg)
                 guard let model = TransferCalibration.calibrate(others) else { continue }
                 let pred = TransferCalibration.predict(model, s.seg.input)
-                let pairs = zip(pred, s.seg.reference).compactMap { p, r in p.map { ($0, r) } }
+                let pairs = zip(pred, s.seg.reference).compactMap { p, r in r.isFinite ? p.map { ($0, r) } : nil }
                 guard !pairs.isEmpty else { continue }
                 let pm = pairs.map(\.0).reduce(0, +) / Double(pairs.count)
                 let rm = pairs.map(\.1).reduce(0, +) / Double(pairs.count)
                 let rms = (pairs.map { ($0.0 - $0.1) * ($0.0 - $0.1) }.reduce(0, +) / Double(pairs.count)).squareRoot()
                 let lastT = s.seg.input.t.last! - 3600
                 let last = zip(s.seg.input.t, zip(pred, s.seg.reference)).filter { $0.0 >= lastT }
-                    .compactMap { _, pr in pr.0.map { $0 - pr.1 } }
+                    .compactMap { _, pr in pr.1.isFinite ? pr.0.map { $0 - pr.1 } : nil }
                 let lastErr = last.isEmpty ? nil : last.reduce(0, +) / Double(last.count)
                 errors.append(pm - rm)
                 // 5-minute means of the residual for the autocorrelation estimate.
                 var grid: [Int: (Double, Int)] = [:]
                 for j in s.seg.input.t.indices {
-                    guard let pj = pred[j] else { continue }
+                    guard let pj = pred[j], s.seg.reference[j].isFinite else { continue }
                     let b = Int((s.seg.input.t[j] - s.seg.input.t[0]) / 300)
                     let v = grid[b] ?? (0, 0)
                     grid[b] = (v.0 + pj - s.seg.reference[j], v.1 + 1)
                 }
                 if let maxB = grid.keys.max() {
-                    residualSeries.append((0...maxB).compactMap { grid[$0].map { $0.0 / Double($0.1) } })
+                    // Continuous runs only: never correlate across an excluded stretch.
+                    var run: [Double] = []
+                    for b in 0...maxB {
+                        if let v = grid[b] { run.append(v.0 / Double(v.1)) } else if !run.isEmpty { residualSeries.append(run); run = [] }
+                    }
+                    if !run.isEmpty { residualSeries.append(run) }
                 }
                 if verbose {
                     var buckets: [Int: (e: Double, p: Double, f: Double, c: Double, n: Double)] = [:]
                     for j in s.seg.input.t.indices {
-                        guard let pj = pred[j] else { continue }
+                        guard let pj = pred[j], s.seg.reference[j].isFinite else { continue }
                         let b = Int((s.seg.input.t[j] - s.seg.input.t[0]) / 1800)
                         var v = buckets[b] ?? (0, 0, 0, 0, 0)
                         v.e += pj - s.seg.reference[j]; v.p += s.seg.input.power[j]
